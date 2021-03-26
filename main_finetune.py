@@ -22,11 +22,11 @@ from torchvision.models.detection.faster_rcnn import FastRCNNPredictor
 #import math
 
 
-TRAIN_FRAMES = "/home/arpan/VisionWorkspace/Cricket/batsman_pose_track/ICC_WT20_frames/train"
-VAL_FRAMES = "/home/arpan/VisionWorkspace/Cricket/batsman_pose_track/ICC_WT20_frames/val"
-TEST_FRAMES = "/home/arpan/VisionWorkspace/Cricket/batsman_pose_track/ICC_WT20_frames/test"
+TRAIN_FRAMES = "/home/arpan/VisionWorkspace/Cricket/batsman_detection/ICC_WT20_frames/train"
+VAL_FRAMES = "/home/arpan/VisionWorkspace/Cricket/batsman_detection/ICC_WT20_frames/val"
+TEST_FRAMES = "/home/arpan/VisionWorkspace/Cricket/batsman_detection/ICC_WT20_frames/test"
 ANNOTATION_FILE = "/home/arpan/VisionWorkspace/Cricket/batsman_pose_track/batsman_pose_gt"
-BASE_PATH = "/home/arpan/VisionWorkspace/Cricket/batsman_pose_track/pose_action_ipynb/logs"
+BASE_PATH = "/home/arpan/VisionWorkspace/Cricket/batsman_detection/logs_new"
 # let's train it for 10 epochs
 num_epochs = 10
 
@@ -53,8 +53,8 @@ class BatsmanDetectionDataset(torch.utils.data.Dataset):
                 self.bboxes_pos.append(box)
                 self.img_paths_pos.append(self.img_paths[idx])
                 
-        #self.bboxes = self.bboxes[:12]
-        #self.img_paths_pos = self.img_paths_pos[:12]
+#        self.bboxes = self.bboxes[:1000]
+#        self.img_paths_pos = self.img_paths_pos[:1000]
         
         
     def get_annotation_boxes(self, keys_dict):
@@ -152,7 +152,7 @@ def save_model_checkpoint(base_name, model, ep, opt):
     if not os.path.exists(base_name):
         os.makedirs(base_name)
     # Save only the model params
-    name = os.path.join(base_name, "FastRCNN_resnet50_ep"+str(ep)+"_"+opt+".pt")
+    name = os.path.join(base_name, "FasterRCNN_resnet50_ep"+str(ep)+"_"+opt+".pt")
 #    if use_gpu and torch.cuda.device_count() > 1:
 #        model = model.module    # good idea to unwrap from DataParallel and save
 
@@ -162,7 +162,7 @@ def save_model_checkpoint(base_name, model, ep, opt):
 
 if __name__ == '__main__':
     
-    device = torch.device('cuda') if torch.cuda.is_available() else torch.device('cpu')
+    device = torch.device('cuda:1') if torch.cuda.is_available() else torch.device('cpu')
     
     # use our dataset and defined transformations
     dataset = BatsmanDetectionDataset(TRAIN_FRAMES, ANNOTATION_FILE, \
@@ -178,10 +178,10 @@ if __name__ == '__main__':
     dataset_test = torch.utils.data.Subset(dataset_test, indices_test[:])
     
     # define training and validation data loaders
-    data_loader = torch.utils.data.DataLoader(dataset, batch_size=2, shuffle=True, \
+    data_loader = torch.utils.data.DataLoader(dataset, batch_size=16, shuffle=True, \
                                               num_workers=4, collate_fn=utils.collate_fn)
     
-    data_loader_test = torch.utils.data.DataLoader(dataset_test, batch_size=1, \
+    data_loader_test = torch.utils.data.DataLoader(dataset_test, batch_size=16, \
                                 shuffle=False, num_workers=4, collate_fn=utils.collate_fn)
     
     # load a model pre-trained on COCO
@@ -199,23 +199,31 @@ if __name__ == '__main__':
     
     # construct an optimizer
     params = [p for p in model.parameters() if p.requires_grad]
-    optimizer = torch.optim.SGD(params, lr=0.005, momentum=0.9, weight_decay=0.0005)
+    lrate = 0.001
+#    optimizer = torch.optim.SGD(params, lr=lrate, momentum=0.9, weight_decay=0.0005)
+    optimizer = torch.optim.Adam(params, lr=lrate)
     
     # and a learning rate scheduler which decreases the learning rate by
     # 10x every 3 epochs
-    lr_scheduler = torch.optim.lr_scheduler.StepLR(optimizer, step_size=3, gamma=0.1)
+    lr_scheduler = torch.optim.lr_scheduler.StepLR(optimizer, step_size=5, gamma=0.1)
+    
+    mod_file = os.path.join(BASE_PATH, \
+                    "FasterRCNN_resnet50_ep"+str(num_epochs)+"_SGD.pt")
+    if os.path.isfile(mod_file):
+        model.load_state_dict(torch.load(mod_file))
     
     for epoch in range(num_epochs):
         # train for one epoch, printing every 10 iterations
-        train_one_epoch(model, optimizer, data_loader, device, epoch, print_freq=10)
+        train_one_epoch(model, optimizer, data_loader, device, epoch, print_freq=200)
         # update the learning rate
         lr_scheduler.step()
         # evaluate on the test dataset
         evaluate(model, data_loader_test, device=device)
         
         if (epoch+1)%5 == 0:
-            save_model_checkpoint(BASE_PATH, model, epoch+1, "SGD")
+            save_model_checkpoint(BASE_PATH, model, epoch+1+2, "SGD")
             
-    mod_file = os.path.join(BASE_PATH, "FastRCNN_resnet50_ep"+str(num_epochs)+"_SGD.pt")
-    model.load_state_dict(torch.load(mod_file))    
+    mod_file = os.path.join(BASE_PATH, \
+                    "FasterRCNN_resnet50_ep"+str(num_epochs)+"_SGD.pt")
+    model.load_state_dict(torch.load(mod_file))
     evaluate(model, data_loader_test, device=device)

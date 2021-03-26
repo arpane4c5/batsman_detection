@@ -324,3 +324,10 @@ def init_distributed_mode(args):
                                          world_size=args.world_size, rank=args.rank)
     torch.distributed.barrier()
     setup_for_distributed(args.rank == 0)
+
+# Split the dataset files into training, validation and test sets
+# All video files present at the same path (assumed)
+def split_dataset_files(datasetPath):
+    filenames = sorted(os.listdir(datasetPath))         # read the filename
+    filenames = [t.split('.')[0] for t in filenames]   # remove the extension
+    return filenames[:16], filenames[16:21], filenames[21:]

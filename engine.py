@@ -51,6 +51,7 @@ def train_one_epoch(model, optimizer, data_loader, device, epoch, print_freq):
 
         metric_logger.update(loss=losses_reduced, **loss_dict_reduced)
         metric_logger.update(lr=optimizer.param_groups[0]["lr"])
+#        break
 
 
 def _get_iou_types(model):
